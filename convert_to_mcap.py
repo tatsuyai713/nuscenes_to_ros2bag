@@ -14,7 +14,8 @@ from nuscenes.eval.common.utils import quaternion_yaw
 from nuscenes.map_expansion.map_api import NuScenesMap
 from nuscenes.nuscenes import NuScenes
 from PIL import Image
-from pypcd import pypcd
+from pypcd import numpy_pc2, pypcd
+
 from pyquaternion import Quaternion
 from tqdm import tqdm
 

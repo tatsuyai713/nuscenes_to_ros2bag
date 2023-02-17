@@ -1,0 +1,32 @@
+rosbag2_bagfile_information:
+  version: 5
+  storage_identifier: mcap
+  duration:
+    nanoseconds: 19149566000
+  starting_time:
+    nanoseconds_since_epoch: 1532402927647951000
+  message_count: 234
+  topics_with_message_count:
+    - topic_metadata:
+        name: /radar
+        type: sensor_msgs/msg/PointCloud2
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 195
+    - topic_metadata:
+        name: /lidar
+        type: sensor_msgs/msg/PointCloud2
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 39
+  compression_format: ""
+  compression_mode: ""
+  relative_file_paths:
+    - out_0.mcap
+  files:
+    - path: out_0.mcap
+      starting_time:
+        nanoseconds_since_epoch: 1532402927647951000
+      duration:
+        nanoseconds: 19149566000
+      message_count: 234
