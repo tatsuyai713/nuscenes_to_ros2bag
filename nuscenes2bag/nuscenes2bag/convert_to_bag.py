@@ -20,6 +20,8 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
     #define sensor topics  
     create_topics(nusc, scene, writer)
     while cur_sample is not None:
+        log = nusc.get('log', scene['log_token'])
+        location = log['location']
         sample_lidar = nusc.get("sample_data", cur_sample["data"]["LIDAR_TOP"])
         ego_pose = nusc.get("ego_pose", sample_lidar["ego_pose_token"])
         stamp = get_time(ego_pose)
@@ -49,6 +51,10 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
         # publish /pose
         pose_stamped = get_pose(stamp)
         writer.write('/pose', serialize_message(pose_stamped), to_nano(stamp))
+        
+        #publish /gps
+        gps = get_gps(location, ego_pose, stamp)
+        writer.write('/gps', serialize_message(gps), to_nano(stamp))
 
         # collect all sensor frames after this sample but before the next sample
         non_keyframe_sensor_msgs = []

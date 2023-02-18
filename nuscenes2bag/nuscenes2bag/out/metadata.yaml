@@ -5,8 +5,14 @@ rosbag2_bagfile_information:
     nanoseconds: 19149566000
   starting_time:
     nanoseconds_since_epoch: 1532402927647951000
-  message_count: 5872
+  message_count: 5911
   topics_with_message_count:
+    - topic_metadata:
+        name: /gps
+        type: sensor_msgs/msg/NavSatFix
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 39
     - topic_metadata:
         name: /CAM_FRONT_LEFT/image_markers_annotations
         type: foxglove_msgs/msg/ImageMarkerArray
@@ -203,4 +209,4 @@ rosbag2_bagfile_information:
         nanoseconds_since_epoch: 1532402927647951000
       duration:
         nanoseconds: 19149566000
-      message_count: 5872
+      message_count: 5911

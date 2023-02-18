@@ -22,6 +22,7 @@ from nuscenes.eval.common.utils import quaternion_yaw
 from nuscenes.map_expansion.map_api import NuScenesMap
 from nuscenes.nuscenes import NuScenes
 import rosbag2_py
+import math
 
 class Collector:
     """
@@ -67,6 +68,11 @@ def create_topics(nusc, scene, writer):
     # pose
     writer.create_topic(rosbag2_py.TopicMetadata(
         name="/pose", type="geometry_msgs/msg/PoseStamped", serialization_format="cdr"
+    ))
+
+    # gps
+    writer.create_topic(rosbag2_py.TopicMetadata(
+        name="/gps", type="sensor_msgs/msg/NavSatFix", serialization_format="cdr"
     ))
 
 def get_num_sample_data(nusc: NuScenes, scene):
