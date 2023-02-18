@@ -1,80 +1,7 @@
-import argparse
-
-import rclpy
-from rclpy.duration import Duration
-from rclpy.serialization import serialize_message
-
-from std_msgs.msg import String
-from sensor_msgs.msg import CameraInfo, CompressedImage, Imu, NavSatFix, PointCloud2, PointField
-from builtin_interfaces.msg import Time 
-from pypcd import numpy_pc2, pypcd
-
-from tqdm import tqdm
-import time 
-from pathlib import Path
-import os
-from nuscenes.can_bus.can_bus_api import NuScenesCanBus
-from nuscenes.eval.common.utils import quaternion_yaw
-from nuscenes.map_expansion.map_api import NuScenesMap
-from nuscenes.nuscenes import NuScenes
-import rosbag2_py
-
-DATA_DIR = Path('work/data')
-TOPIC_NAME = "/chatter"
-
-def get_num_sample_data(nusc: NuScenes, scene):
-    num_sample_data = 0
-    sample = nusc.get("sample", scene["first_sample_token"])
-    for sample_token in sample["data"].values():
-        sample_data = nusc.get("sample_data", sample_token)
-        while sample_data is not None:
-            num_sample_data += 1
-            sample_data = nusc.get("sample_data", sample_data["next"]) if sample_data["next"] != "" else None
-    return num_sample_data
-
-def get_time(data):
-    t = Time()
-    t.sec, msec = divmod(data["timestamp"], 1_000_000)
-    t.nanosec = msec * 1000
-
-    return t
-
-def to_nano(stamp):
-    return stamp.sec * 1000000000 + stamp.nanosec
-
-def get_radar(data_path, sample_data, frame_id):
-    pc_filename = data_path / sample_data['filename']
-    pc = pypcd.PointCloud.from_path(pc_filename)
-    msg = numpy_pc2.array_to_pointcloud2(pc.pc_data)
-    msg.header.frame_id = frame_id
-    msg.header.stamp = get_time(sample_data)
-    return msg
-
-def get_lidar(data_path, sample_data, frame_id):
-    pc_filename = data_path / sample_data['filename']
-    pc_filesize = os.stat(pc_filename).st_size
-
-    with open(pc_filename, 'rb') as pc_file:
-        msg = PointCloud2()
-        msg.header.frame_id = frame_id
-        msg.header.stamp = get_time(sample_data)
-
-        msg.fields = [
-            PointField(name='x', offset=0, datatype=PointField.FLOAT32, count=1),
-            PointField(name='y', offset=4, datatype=PointField.FLOAT32, count=1),
-            PointField(name='z', offset=8, datatype=PointField.FLOAT32, count=1),
-            PointField(name='intensity', offset=12, datatype=PointField.FLOAT32, count=1),
-            PointField(name='ring', offset=16, datatype=PointField.FLOAT32, count=1),
-        ]
-
-        msg.is_bigendian = False
-        msg.is_dense = True
-        msg.point_step = len(msg.fields) * 4 # 4 bytes per field
-        msg.row_step = pc_filesize
-        msg.width = round(pc_filesize / msg.point_step)
-        msg.height = 1 # unordered
-        msg.data = pc_file.read()
-        return msg
+from utils import * 
+from sensor_utils import * 
+from annotation_utils import *
+from map_utils import * 
 
 def write_scene(nusc, nusc_can, scene, output_path: str):
     writer = rosbag2_py.SequentialWriter()
@@ -87,26 +14,11 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
 
     pbar = tqdm(total=get_num_sample_data(nusc, scene), unit="sample_data", desc=f"{scene['name']} Sample Data", leave=False)
 
-    # writer.create_topic(
-    #     rosbag2_py.TopicMetadata(
-    #         name=TOPIC_NAME, type="std_msgs/msg/String", serialization_format="cdr"
-    #     )
-    # )
-    #define sensor topics  
-
-    writer.create_topic(
-        rosbag2_py.TopicMetadata(
-            name="/lidar", type="sensor_msgs/msg/PointCloud2", serialization_format="cdr"
-        )
-    )
-    writer.create_topic(
-        rosbag2_py.TopicMetadata(
-            name="/radar", type="sensor_msgs/msg/PointCloud2", serialization_format="cdr"
-        )
-    )
     #loop through smaples
     cur_sample = nusc.get("sample", scene["first_sample_token"])
 
+    #define sensor topics  
+    create_topics(nusc, scene, writer)
     while cur_sample is not None:
         sample_lidar = nusc.get("sample_data", cur_sample["data"]["LIDAR_TOP"])
         ego_pose = nusc.get("ego_pose", sample_lidar["ego_pose_token"])
@@ -119,10 +31,76 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
             topic = "/" + sensor_id
             if sample_data["sensor_modality"] == "radar":
                     msg = get_radar(data_path, sample_data, sensor_id)
-                    writer.write("/radar", serialize_message(msg), to_nano(stamp))
-            if sample_data["sensor_modality"] == "lidar":
+                    writer.write(topic, serialize_message(msg), to_nano(stamp))
+            elif sample_data["sensor_modality"] == "lidar":
                     msg = get_lidar(data_path, sample_data, sensor_id)
-                    writer.write("/lidar", serialize_message(msg), to_nano(stamp))
+                    writer.write(topic, serialize_message(msg), to_nano(stamp))
+            elif sample_data["sensor_modality"] == "camera":
+                    msg = get_camera(data_path, sample_data, sensor_id)
+                    writer.write(topic + "/image_rect_compressed", serialize_message(msg), to_nano(stamp))
+                    msg = get_camera_info(nusc, sample_data, sensor_id)
+                    writer.write(topic + "/camera_info", serialize_message(msg), to_nano(stamp))
+
+            if sample_data['sensor_modality'] == 'camera':
+                    msg = get_lidar_imagemarkers(nusc, sample_lidar, sample_data, sensor_id)
+                    writer.write(topic + '/image_markers_lidar', serialize_message(msg), to_nano(stamp))
+                    write_boxes_imagemarkers(nusc, writer, cur_sample['anns'], sample_data, sensor_id, topic, to_nano(stamp))
+        
+        # publish /pose
+        pose_stamped = get_pose(stamp)
+        writer.write('/pose', serialize_message(pose_stamped), to_nano(stamp))
+
+        # collect all sensor frames after this sample but before the next sample
+        non_keyframe_sensor_msgs = []
+        for (sensor_id, sample_token) in cur_sample['data'].items():
+            topic = '/' + sensor_id
+
+            next_sample_token = nusc.get('sample_data', sample_token)['next']
+            while next_sample_token != '':
+                next_sample_data = nusc.get('sample_data', next_sample_token)
+                # if next_sample_data['is_key_frame'] or get_time(next_sample_data).to_nsec() > next_stamp.to_nsec():
+                #     break
+                if next_sample_data['is_key_frame']:
+                    break
+
+                pbar.update(1)
+                if next_sample_data['sensor_modality'] == 'radar':
+                    msg = get_radar(data_path, next_sample_data, sensor_id)
+                    non_keyframe_sensor_msgs.append((to_nano(msg.header.stamp), topic, msg))
+                elif next_sample_data['sensor_modality'] == 'lidar':
+                    msg = get_lidar(data_path, next_sample_data, sensor_id)
+                    non_keyframe_sensor_msgs.append((to_nano(msg.header.stamp), topic, msg))
+                elif next_sample_data['sensor_modality'] == 'camera':
+                    msg = get_camera(data_path, next_sample_data, sensor_id)
+                    camera_stamp_nsec = to_nano(msg.header.stamp)
+                    non_keyframe_sensor_msgs.append((camera_stamp_nsec, topic + '/image_rect_compressed', msg))
+
+                    msg = get_camera_info(nusc, next_sample_data, sensor_id)
+                    non_keyframe_sensor_msgs.append((camera_stamp_nsec, topic + '/camera_info', msg))
+
+                    closest_lidar = find_closest_lidar(nusc, cur_sample["data"]["LIDAR_TOP"], camera_stamp_nsec)
+                    if closest_lidar is not None:
+                        msg = get_lidar_imagemarkers(nusc, closest_lidar, next_sample_data, sensor_id)
+                        non_keyframe_sensor_msgs.append(
+                            (
+                                to_nano(msg.header.stamp),
+                                topic + "/image_markers_lidar",
+                                msg,
+                            )
+                        )
+
+                    # Delete all image markers on non-keyframe camera images
+                    # msg = get_remove_imagemarkers(sensor_id, 'LIDAR_TOP', msg.header.stamp)
+                    # non_keyframe_sensor_msgs.append((camera_stamp_nsec, topic + '/image_markers_lidar', msg))
+                    # msg = get_remove_imagemarkers(sensor_id, 'annotations', msg.header.stamp)
+                    # non_keyframe_sensor_msgs.append((camera_stamp_nsec, topic + '/image_markers_annotations', msg))
+
+                next_sample_token = next_sample_data['next']
+
+        # sort and publish the non-keyframe sensor msgs
+        non_keyframe_sensor_msgs.sort(key=lambda x: x[0])
+        for (_, topic, msg) in non_keyframe_sensor_msgs:
+            writer.write(topic, serialize_message(msg), to_nano(msg.header.stamp))
         # move to the next sample
         cur_sample = nusc.get("sample", cur_sample["next"]) if cur_sample.get("next") != "" else None
 
