@@ -2,8 +2,10 @@ from utils import *
 from sensor_utils import * 
 from annotation_utils import *
 from map_utils import * 
+from can_utils import *
 
-def write_scene(nusc, nusc_can, scene, output_path: str):
+def write_scene(nusc, nusc_can, scene, output_path):
+    scene_name = scene['name']
     data_path = Path(nusc.dataroot)
     log = nusc.get('log', scene['log_token'])
     location = log['location']
@@ -17,7 +19,7 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
 
     writer = rosbag2_py.SequentialWriter()
     writer.open(
-        rosbag2_py.StorageOptions(uri=output_path, storage_id="mcap"),
+        rosbag2_py.StorageOptions(uri=str(output_path), storage_id="mcap"),
         rosbag2_py.ConverterOptions(
             input_serialization_format="cdr", output_serialization_format="cdr"
         ),
@@ -29,6 +31,16 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
 
     #loop through smaples
     cur_sample = nusc.get("sample", scene["first_sample_token"])
+
+
+    can_parsers = [
+        [nusc_can.get_messages(scene_name, 'ms_imu'), 0, get_imu_msg],
+        [nusc_can.get_messages(scene_name, 'pose'), 0, get_odom_msg],
+        [nusc_can.get_messages(scene_name, 'steeranglefeedback'), 0, lambda x: get_basic_can_msg('Steering Angle', x)],
+        [nusc_can.get_messages(scene_name, 'vehicle_monitor'), 0, lambda x: get_basic_can_msg('Vehicle Monitor', x)],
+        [nusc_can.get_messages(scene_name, 'zoesensors'), 0, lambda x: get_basic_can_msg('Zoe Sensors', x)],
+        [nusc_can.get_messages(scene_name, 'zoe_veh_info'), 0, lambda x: get_basic_can_msg('Zoe Vehicle Info', x)],
+    ]
 
     # /map
     stamp = get_time(nusc.get('ego_pose', nusc.get('sample_data', cur_sample['data']['LIDAR_TOP'])['ego_pose_token']))
@@ -44,6 +56,19 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
         sample_lidar = nusc.get("sample_data", cur_sample["data"]["LIDAR_TOP"])
         ego_pose = nusc.get("ego_pose", sample_lidar["ego_pose_token"])
         stamp = get_time(ego_pose)
+
+
+        # write CAN messages to /pose, /odom, and /diagnostics
+        can_msg_events = []
+        for i in range(len(can_parsers)):
+            (can_msgs, index, msg_func) = can_parsers[i]
+            while index < len(can_msgs) and to_nano(get_utime(can_msgs[index])) < to_nano(stamp):
+                can_msg_events.append(msg_func(can_msgs[index]))
+                index += 1
+                can_parsers[i][1] = index
+        can_msg_events.sort(key = lambda x: to_nano(x[0]))
+        for (msg_stamp, topic, msg) in can_msg_events:
+            writer.write(topic, serialize_message(msg), to_nano(stamp))
 
         # publish /tf
         tf_array = get_tfmessage(nusc, cur_sample)
@@ -75,7 +100,7 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
                     write_boxes_imagemarkers(nusc, writer, cur_sample['anns'], sample_data, sensor_id, topic, to_nano(stamp))
         
         # publish /pose
-        pose_stamped = get_pose(stamp)
+        pose_stamped = get_pose_stamped(stamp)
         writer.write('/pose', serialize_message(pose_stamped), to_nano(stamp))
         
         #publish /gps
@@ -153,17 +178,57 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
 
     del writer
 
+def convert_all(
+    output_dir: Path,
+    name: str,
+    nusc: NuScenes,
+    nusc_can: NuScenesCanBus,
+    selected_scenes,
+):
+    nusc.list_scenes()
+    for scene in nusc.scene:
+        scene_name = scene["name"]
+        if selected_scenes is not None and scene_name not in selected_scenes:
+            continue
+        mcap_name = f"NuScenes-{name}-{scene_name}.mcap"
+        write_scene(nusc, nusc_can, scene, output_dir / mcap_name)
 
 def main():
+    script_dir = Path(__file__).parent
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("output", help="output directory to create and write to")
-
+    parser.add_argument("--scene", "-s", nargs="*", help="specific scene(s) to write")
+    parser.add_argument("--list-only", action="store_true", help="lists the scenes and exits")
+    parser.add_argument(
+        "--data-dir",
+        "-d",
+        default="/work/data",
+        help="path to nuscenes data directory",
+    )
+    parser.add_argument(
+        "--dataset-name",
+        "-n",
+        default=["v1.0-mini"],
+        nargs="+",
+        help="dataset to convert",
+    )
+    parser.add_argument(
+        "--output-dir",
+        "-o",
+        type=Path,
+        default=script_dir / "output",
+        help="path to write MCAP files into",
+    )
     args = parser.parse_args()
-
-    nusc = NuScenes(version="v1.0-mini", dataroot="/work/data", verbose=True)
-    nusc_can = NuScenesCanBus(dataroot="/work/data")
-
-    write_scene(nusc, nusc_can, nusc.scene[0], str(args.output))
+    
+    nusc_can = NuScenesCanBus(dataroot=args.data_dir)
+    
+    for name in args.dataset_name:
+        nusc = NuScenes(version=name, dataroot=str(args.data_dir), verbose=True)
+        if args.list_only:
+            nusc.list_scenes()
+            return
+        convert_all(args.output_dir, name, nusc, nusc_can, args.scene)
+    # write_scene(nusc, nusc_can, nusc.scene[0], str(args.output))
 
 
 if __name__ == "__main__":

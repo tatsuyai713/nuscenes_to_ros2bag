@@ -14,6 +14,7 @@ from geometry_msgs.msg import Point, Pose, PoseStamped, Transform, TransformStam
 from tf2_msgs.msg import TFMessage
 import numpy as np
 from foxglove_msgs.msg import ImageMarkerArray
+from diagnostic_msgs.msg import DiagnosticArray, DiagnosticStatus, KeyValue
 
 from tqdm import tqdm
 import time 
@@ -101,8 +102,22 @@ def create_topics(nusc, scene, writer):
         name="/map", type="nav_msgs/msg/OccupancyGrid", serialization_format="cdr"
     ))
 
+
     writer.create_topic(rosbag2_py.TopicMetadata(
         name="/semantic_map", type="visualization_msgs/msg/MarkerArray", serialization_format="cdr"
+    ))
+
+    # CAN
+    writer.create_topic(rosbag2_py.TopicMetadata(
+        name="/imu", type="sensor_msgs/msg/Imu", serialization_format="cdr"
+    ))
+
+    writer.create_topic(rosbag2_py.TopicMetadata(
+        name="/odom", type="nav_msgs/msg/Odometry", serialization_format="cdr"
+    ))
+
+    writer.create_topic(rosbag2_py.TopicMetadata(
+        name="/diagnostics", type="diagnostic_msgs/msg/DiagnosticArray", serialization_format="cdr"
     ))
 
 def get_num_sample_data(nusc: NuScenes, scene):
@@ -118,6 +133,13 @@ def get_num_sample_data(nusc: NuScenes, scene):
 def get_time(data):
     t = Time()
     t.sec, msec = divmod(data["timestamp"], 1_000_000)
+    t.nanosec = msec * 1000
+
+    return t
+
+def get_utime(data):
+    t = Time()
+    t.sec, msec = divmod(data['utime'], 1_000_000)
     t.nanosec = msec * 1000
 
     return t

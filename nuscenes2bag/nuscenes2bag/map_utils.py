@@ -8,7 +8,7 @@ REFERENCE_COORDINATES = {
     "singapore-queenstown": [1.2782562240223188, 103.76741409301758],
 }
 
-def get_pose(stamp):
+def get_pose_stamped(stamp):
     msg = PoseStamped()
     msg.header.frame_id = 'base_link'
     msg.header.stamp = stamp
