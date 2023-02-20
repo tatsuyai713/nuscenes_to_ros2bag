@@ -62,3 +62,22 @@ def find_closest_lidar(nusc, lidar_start_token, stamp_nsec):
         return None
 
     return min(candidates, key=lambda x: x[0])[1]
+
+def get_marker(nusc, annotation_id, stamp):
+    ann = nusc.get('sample_annotation', annotation_id)
+    marker_id = int(ann['instance_token'][:4], 16)
+    c = np.array(nusc.explorer.get_color(ann['category_name'])) / 255.0
+
+    marker = Marker()
+    marker.header.frame_id = 'map'
+    marker.header.stamp = stamp
+    marker.id = marker_id
+    marker.text = ann['instance_token'][:4]
+    marker.type = Marker.CUBE
+    marker.pose = get_pose(ann)
+    marker.frame_locked = True
+    marker.scale.x = ann['size'][1]
+    marker.scale.y = ann['size'][0]
+    marker.scale.z = ann['size'][2]
+    marker.color = make_color(c, 0.5)
+    return marker

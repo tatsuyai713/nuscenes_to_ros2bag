@@ -5,8 +5,26 @@ rosbag2_bagfile_information:
     nanoseconds: 19149566000
   starting_time:
     nanoseconds_since_epoch: 1532402927647951000
-  message_count: 5911
+  message_count: 6030
   topics_with_message_count:
+    - topic_metadata:
+        name: /semantic_map
+        type: visualization_msgs/msg/MarkerArray
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 1
+    - topic_metadata:
+        name: /drivable_area
+        type: nav_msgs/msg/OccupancyGrid
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 39
+    - topic_metadata:
+        name: /markers/annotations
+        type: visualization_msgs/msg/MarkerArray
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 39
     - topic_metadata:
         name: /gps
         type: sensor_msgs/msg/NavSatFix
@@ -97,6 +115,12 @@ rosbag2_bagfile_information:
         serialization_format: cdr
         offered_qos_profiles: ""
       message_count: 262
+    - topic_metadata:
+        name: /tf
+        type: tf2_msgs/msg/TFMessage
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 39
     - topic_metadata:
         name: /CAM_FRONT/image_rect_compressed
         type: sensor_msgs/msg/CompressedImage
@@ -194,6 +218,12 @@ rosbag2_bagfile_information:
         offered_qos_profiles: ""
       message_count: 219
     - topic_metadata:
+        name: /map
+        type: nav_msgs/msg/OccupancyGrid
+        serialization_format: cdr
+        offered_qos_profiles: ""
+      message_count: 1
+    - topic_metadata:
         name: /CAM_FRONT_LEFT/camera_info
         type: sensor_msgs/msg/CameraInfo
         serialization_format: cdr
@@ -209,4 +239,4 @@ rosbag2_bagfile_information:
         nanoseconds_since_epoch: 1532402927647951000
       duration:
         nanoseconds: 19149566000
-      message_count: 5911
+      message_count: 6030

@@ -79,3 +79,57 @@ def get_camera_info(nusc, sample_data, frame_id):
     msg_info.p[10] = 1
     msg_info.p[11] = 0
     return msg_info
+
+def get_transform(data):
+    t = Transform()
+    t.translation.x = data['translation'][0]
+    t.translation.y = data['translation'][1]
+    t.translation.z = data['translation'][2]
+    
+    t.rotation.w = data['rotation'][0]
+    t.rotation.x = data['rotation'][1]
+    t.rotation.y = data['rotation'][2]
+    t.rotation.z = data['rotation'][3]
+    
+    return t
+
+def get_tfs(nusc, sample):
+    sample_lidar = nusc.get('sample_data', sample['data']['LIDAR_TOP'])
+    ego_pose = nusc.get('ego_pose', sample_lidar['ego_pose_token'])
+    stamp = get_time(ego_pose)
+
+    transforms = []
+
+    # create ego transform
+    ego_tf = TransformStamped()
+    ego_tf.header.frame_id = 'map'
+    ego_tf.header.stamp = stamp
+    ego_tf.child_frame_id = 'base_link'
+    ego_tf.transform = get_transform(ego_pose)
+    transforms.append(ego_tf)
+
+    for (sensor_id, sample_token) in sample['data'].items():
+        sample_data = nusc.get('sample_data', sample_token)
+
+        # create sensor transform
+        sensor_tf = TransformStamped()
+        sensor_tf.header.frame_id = 'base_link'
+        sensor_tf.header.stamp = stamp
+        sensor_tf.child_frame_id = sensor_id
+        sensor_tf.transform = get_transform(
+            nusc.get('calibrated_sensor', sample_data['calibrated_sensor_token']))
+        transforms.append(sensor_tf)
+
+    return transforms
+
+def get_tfmessage(nusc, sample):
+    # get transforms for the current sample
+    tf_array = TFMessage()
+    tf_array.transforms = get_tfs(nusc, sample)
+
+    # add transforms from the next sample to enable interpolation
+    next_sample = nusc.get('sample', sample['next']) if sample.get('next') != '' else None
+    if next_sample is not None:
+        tf_array.transforms += get_tfs(nusc, next_sample)
+
+    return tf_array

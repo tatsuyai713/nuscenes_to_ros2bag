@@ -4,6 +4,17 @@ from annotation_utils import *
 from map_utils import * 
 
 def write_scene(nusc, nusc_can, scene, output_path: str):
+    data_path = Path(nusc.dataroot)
+    log = nusc.get('log', scene['log_token'])
+    location = log['location']
+    print(f'Loading map "{location}"')
+    nusc_map = NuScenesMap(dataroot=data_path, map_name=location)
+
+    print(f'Loading bitmap "{nusc_map.map_name}"')
+    image = load_bitmap(nusc_map.dataroot, nusc_map.map_name, "basemap")
+    print(f"Loaded {image.shape} bitmap")
+    print(f"vehicle is {log['vehicle']}")
+
     writer = rosbag2_py.SequentialWriter()
     writer.open(
         rosbag2_py.StorageOptions(uri=output_path, storage_id="mcap"),
@@ -11,21 +22,36 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
             input_serialization_format="cdr", output_serialization_format="cdr"
         ),
     )
+    #define sensor topics  
+    create_topics(nusc, scene, writer)
 
     pbar = tqdm(total=get_num_sample_data(nusc, scene), unit="sample_data", desc=f"{scene['name']} Sample Data", leave=False)
 
     #loop through smaples
     cur_sample = nusc.get("sample", scene["first_sample_token"])
 
-    #define sensor topics  
-    create_topics(nusc, scene, writer)
+    # /map
+    stamp = get_time(nusc.get('ego_pose', nusc.get('sample_data', cur_sample['data']['LIDAR_TOP'])['ego_pose_token']))
+    map_msg = get_scene_map(nusc, scene, nusc_map, image, stamp)
+    writer.write('/map', serialize_message(map_msg), to_nano(stamp))
+
+    # /semantic_map
+    centerlines_msg = get_centerline_markers(nusc, scene, nusc_map, stamp)
+    writer.write('/semantic_map', serialize_message(centerlines_msg), to_nano(stamp))
+
     while cur_sample is not None:
-        log = nusc.get('log', scene['log_token'])
-        location = log['location']
+        
         sample_lidar = nusc.get("sample_data", cur_sample["data"]["LIDAR_TOP"])
         ego_pose = nusc.get("ego_pose", sample_lidar["ego_pose_token"])
         stamp = get_time(ego_pose)
-        data_path = Path(nusc.dataroot)
+
+        # publish /tf
+        tf_array = get_tfmessage(nusc, cur_sample)
+        writer.write('/tf', serialize_message(tf_array), to_nano(stamp))
+
+        # /driveable_area occupancy grid
+        write_occupancy_grid(writer, nusc_map, ego_pose, stamp)
+
         # iterate sensors
         for (sensor_id, sample_token) in cur_sample["data"].items():
             pbar.update(1)
@@ -55,6 +81,13 @@ def write_scene(nusc, nusc_can, scene, output_path: str):
         #publish /gps
         gps = get_gps(location, ego_pose, stamp)
         writer.write('/gps', serialize_message(gps), to_nano(stamp))
+
+        #publish /markers/annotations
+        marker_array = MarkerArray()
+        for annotation_id in cur_sample['anns']:
+            marker = get_marker(nusc, annotation_id, stamp)
+            marker_array.markers.append(marker)
+        writer.write('/markers/annotations', serialize_message(marker_array), to_nano(stamp))
 
         # collect all sensor frames after this sample but before the next sample
         non_keyframe_sensor_msgs = []

@@ -6,10 +6,12 @@ from rclpy.serialization import serialize_message
 
 from std_msgs.msg import String, ColorRGBA
 from sensor_msgs.msg import CameraInfo, CompressedImage, Imu, NavSatFix, PointCloud2, PointField
+from nav_msgs.msg import OccupancyGrid, Odometry
 from builtin_interfaces.msg import Time 
 from pypcd import numpy_pc2, pypcd
 from visualization_msgs.msg import ImageMarker, Marker, MarkerArray
 from geometry_msgs.msg import Point, Pose, PoseStamped, Transform, TransformStamped
+from tf2_msgs.msg import TFMessage
 import numpy as np
 from foxglove_msgs.msg import ImageMarkerArray
 
@@ -21,8 +23,12 @@ from nuscenes.can_bus.can_bus_api import NuScenesCanBus
 from nuscenes.eval.common.utils import quaternion_yaw
 from nuscenes.map_expansion.map_api import NuScenesMap
 from nuscenes.nuscenes import NuScenes
+from nuscenes.eval.common.utils import quaternion_yaw
+from pyquaternion import Quaternion
+
 import rosbag2_py
 import math
+from PIL import Image
 
 class Collector:
     """
@@ -75,6 +81,30 @@ def create_topics(nusc, scene, writer):
         name="/gps", type="sensor_msgs/msg/NavSatFix", serialization_format="cdr"
     ))
 
+    # annotations
+    writer.create_topic(rosbag2_py.TopicMetadata(
+        name="/markers/annotations", type="visualization_msgs/msg/MarkerArray", serialization_format="cdr"
+    ))
+
+    # tf
+    writer.create_topic(rosbag2_py.TopicMetadata(
+        name="/tf", type="tf2_msgs/msg/TFMessage", serialization_format="cdr"
+    ))
+
+    # occupancy grid
+    writer.create_topic(rosbag2_py.TopicMetadata(
+        name="/drivable_area", type="nav_msgs/msg/OccupancyGrid", serialization_format="cdr"
+    ))
+
+    # map
+    writer.create_topic(rosbag2_py.TopicMetadata(
+        name="/map", type="nav_msgs/msg/OccupancyGrid", serialization_format="cdr"
+    ))
+
+    writer.create_topic(rosbag2_py.TopicMetadata(
+        name="/semantic_map", type="visualization_msgs/msg/MarkerArray", serialization_format="cdr"
+    ))
+
 def get_num_sample_data(nusc: NuScenes, scene):
     num_sample_data = 0
     sample = nusc.get("sample", scene["first_sample_token"])
@@ -123,3 +153,21 @@ def turbomap(x):
   return [colormap[a][0] + (colormap[b][0] - colormap[a][0]) * f,
           colormap[a][1] + (colormap[b][1] - colormap[a][1]) * f,
           colormap[a][2] + (colormap[b][2] - colormap[a][2]) * f]
+
+def get_pose(data):
+    p = Pose()
+    p.position.x = data['translation'][0]
+    p.position.y = data['translation'][1]
+    p.position.z = data['translation'][2]
+    
+    p.orientation.w = data['rotation'][0]
+    p.orientation.x = data['rotation'][1]
+    p.orientation.y = data['rotation'][2]
+    p.orientation.z = data['rotation'][3]
+    
+    return p
+
+def rectContains(rect, point):
+    a, b, c, d = rect
+    x, y = point[:2]
+    return a <= x < a + c and b <= y < b + d
