@@ -1,7 +1,6 @@
 [dev-packages]
 flake8 = "*"
 black = "*"
-std_msgs = {version = "*", index = "ros"}
 
 [requires]
 python_version = "3"
