@@ -7,6 +7,7 @@ data
 .DS_Store
 __pycache__
 *.mcap
+output
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
