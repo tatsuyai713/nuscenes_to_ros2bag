@@ -2,8 +2,16 @@
 *.tgz
 *.zip
 .ipynb_checkpoints
-.Trash-*
 data
-.DS_Store
 __pycache__
 *.mcap
+output
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+
+# Distribution / packaging
+build/
+install/
+log/
+

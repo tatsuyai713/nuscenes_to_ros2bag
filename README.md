@@ -1,3 +1,57 @@
+# nuscenes_to_ros2bag
+
+## Usage
+
+### Converting nuScenes data to ROS2 bag
+1. Download the [nuScenes mini dataset](https://nuscenes.org/nuscenes). You will need to make
+   an account and agree to the terms of use.
+2. Extract the following files into the `data/` directory:
+    1. `can_bus.zip` to `data/`
+    2. `nuScenes-map-expansion-v1.3.zip` to `data/maps`
+    3. `v1.0-mini.tgz` to `data/`
+3. Build and run the converter container with `./convert_to_ros2bag.sh`
+
+The file of `/data` structure is the same as that of [foxglove/nuscenes2mcap](https://github.com/foxglove/nuscenes2mcap)
+```
+/data
+├── can_bus
+├── maps
+│   ├── basemap
+│   ├── expansion
+│   └── prediction
+├── samples
+│   ├── CAM_BACK
+│   ├── CAM_BACK_LEFT
+│   ├── CAM_BACK_RIGHT
+│   ├── CAM_FRONT
+│   ├── CAM_FRONT_LEFT
+│   ├── CAM_FRONT_RIGHT
+│   ├── LIDAR_TOP
+│   ├── RADAR_BACK_LEFT
+│   ├── RADAR_BACK_RIGHT
+│   ├── RADAR_FRONT
+│   ├── RADAR_FRONT_LEFT
+│   └── RADAR_FRONT_RIGHT
+├── sweeps
+│   ├── CAM_BACK
+│   ├── CAM_BACK_LEFT
+│   ├── CAM_BACK_RIGHT
+│   ├── CAM_FRONT
+│   ├── CAM_FRONT_LEFT
+│   ├── CAM_FRONT_RIGHT
+│   ├── LIDAR_TOP
+│   ├── RADAR_BACK_LEFT
+│   ├── RADAR_BACK_RIGHT
+│   ├── RADAR_FRONT
+│   ├── RADAR_FRONT_LEFT
+│   └── RADAR_FRONT_RIGHT
+└── v1.0-mini
+```
+
+
+
+---
+From [foxglove/nuscenes2mcap](https://github.com/foxglove/nuscenes2mcap)
 # nuscenes2mcap
 
 > _Convert [nuScenes](https://www.nuscenes.org/) data into [MCAP](https://mcap.dev/) format_
