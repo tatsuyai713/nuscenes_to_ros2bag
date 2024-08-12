@@ -6,8 +6,34 @@ RUN apt install -y python3-colcon-common-extensions
 
 RUN rm -rf /var/lib/apt/lists/*
 
-RUN pip3 install shapely numpy nuscenes-devkit mcap tqdm requests
-RUN pip3 install git+https://github.com/DanielPollithy/pypcd.git
+RUN pip3 install shapely numpy==1.26.4 nuscenes-devkit mcap tqdm requests
+
+
+RUN apt-get update && apt-get install -y \
+    git \
+    sed
+
+# pypcdリポジトリをクローン
+RUN git clone https://github.com/DanielPollithy/pypcd.git /pypcd
+
+# 作業ディレクトリに移動
+WORKDIR /pypcd
+
+# np.floatをfloatに置換するスクリプトを作成
+RUN echo '#!/bin/sh\n\
+sed -i "s/np.float/float/g" pypcd/numpy_pc2.py' > replace_np_float.sh
+
+# スクリプトに実行権限を付与
+RUN chmod +x replace_np_float.sh
+
+# スクリプトを実行して置換
+RUN ./replace_np_float.sh
+
+# 修正されたpypcdをインストール
+RUN pip install .
+
+#RUN pip3 install git+https://github.com/DanielPollithy/pypcd.git
+
 
 COPY . /work
 
